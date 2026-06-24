@@ -30,8 +30,8 @@ import threading
 import time
 from pathlib import Path
 
-import numpy as np
 import adamo
+import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from adamo_isaac_teleop import (
@@ -46,14 +46,14 @@ OPENARM = Path(os.environ.get("OPENARM_DIR", Path.home() / "openarm_vr_teleop"))
 sys.path.insert(0, str(OPENARM))          # for `import kinematics` / `can_motor`
 sys.path.insert(0, str(OPENARM.parent))   # for `openarm_vr_teleop` as a package
 
-from kinematics import OpenArmKinematics
 from can_motor import OpenArmCAN
+from kinematics import OpenArmKinematics
 from openarm_vr_teleop.can_vr_teleop_mid import (
-    ArmIKController,
     GRIPPER_CLOSED,
     GRIPPER_OPEN,
     HOME_JOINTS_LEFT,
     HOME_JOINTS_RIGHT,
+    ArmIKController,
     OneEuroFilter,
 )
 
@@ -78,8 +78,8 @@ DEFAULT_CAN = {"right": "waveshare:0", "left": "waveshare:1"}
 def device_interface(session_in, session_out, sides, stop: threading.Event) -> None:
     rx = TeleopReceiver(WEB_ROBOT, session_in)
     sink = DeviceSink(SEAM_ROBOT, session_out)
-    print("[isaac#1] device interface: %s web client -> %s device seam"
-          % (WEB_ROBOT, SEAM_ROBOT), flush=True)
+    print(f"[isaac#1] device interface: {WEB_ROBOT} web client -> {SEAM_ROBOT} device seam",
+          flush=True)
     dt = 1.0 / CTRL_HZ
     while not stop.is_set():
         for s in sides:
@@ -159,19 +159,19 @@ def main() -> int:
     # ---- enable + home each arm that comes up ----
     arms, kins, cur = {}, {}, {}
     for s in sides:
-        kin = OpenArmKinematics(URDF, "openarm_%s_" % s)
-        print("[%s] ENABLE on %s" % (s, cans[s]), flush=True)
+        kin = OpenArmKinematics(URDF, f"openarm_{s}_")
+        print(f"[{s}] ENABLE on {cans[s]}", flush=True)
         arm = OpenArmCAN(cans[s])
         arm.enable_all()
         time.sleep(0.1)
         start, seen = robust_read(arm)
-        print("[%s] joints %d/7  pos=%s" % (s, sum(seen), np.round(start, 3).tolist()))
+        print(f"[{s}] joints {sum(seen)}/7  pos={np.round(start, 3).tolist()}")
         if not all(seen):
-            print("[%s] skipping: joints %s never reported on %s."
-                  % (s, [i + 1 for i, v in enumerate(seen) if not v], cans[s]))
+            missing = [i + 1 for i, v in enumerate(seen) if not v]
+            print(f"[{s}] skipping: joints {missing} never reported on {cans[s]}.")
             cleanup(arm)
             continue
-        print("[%s] homing to bent-elbow neutral..." % s, flush=True)
+        print(f"[{s}] homing to bent-elbow neutral...", flush=True)
         cur[s] = home_arm(arm, start, HOME[s], args.kp, args.kd)
         arm.set_gripper(GRIPPER_OPEN, kp=args.kp, kd=args.kd)
         arms[s], kins[s] = arm, kin
@@ -193,19 +193,34 @@ def main() -> int:
 
     engines, iks, euros = {}, {}, {}
     for s in sides:
-        dev = rx.controller(s)
-        if dev is None:
+        engine = ControllerRetargetEngine(s)
+        # The retargeter can return None for a few frames before it locks on, even
+        # with a controller present -- warm it up before calibrating off its pose.
+        ee, t0 = None, time.time()
+        while ee is None and time.time() - t0 < 5.0:
+            dev = rx.controller(s)
+            if dev is not None:
+                ee = engine.step(dev.grip_position, dev.grip_orientation)
+            if ee is None:
+                time.sleep(1.0 / CTRL_HZ)
+        if ee is None:
+            print(f"[{s}] no retargeted pose; skipping this arm.", flush=True)
             continue
-        engines[s] = ControllerRetargetEngine(s)
-        ee = engines[s].step(dev.grip_position, dev.grip_orientation)
+        engines[s] = engine
         iks[s] = ArmIKController(kins[s], side=s, position_scale=1.0,
                                  max_joint_velocity=args.max_vel)
         iks[s].calibrate(cur[s], ee[:3])              # position-only (no orientation)
         euros[s] = OneEuroFilter(np.asarray(ee[:3]))
+    if not iks:
+        print("no arm could be calibrated; aborting.")
+        stop.set()
+        for arm in arms.values():
+            cleanup(arm)
+        return 1
 
     dt = 1.0 / CTRL_HZ
-    print("TELEOP LIVE on %s -- via Isaac ControllerRetargetEngine. Ctrl+C to stop."
-          % ", ".join(iks), flush=True)
+    print(f"TELEOP LIVE on {', '.join(iks)} -- via Isaac ControllerRetargetEngine. Ctrl+C to stop.",
+          flush=True)
     last_dbg = 0.0
     prev: dict = {}
     try:
@@ -232,8 +247,8 @@ def main() -> int:
                     cur[s] = cmd
                 arms[s]._process_responses()
                 if now - last_dbg > 0.5 and cmd is not None:
-                    print("[%s] ee=%s  step=%.3f  trig=%.2f grip=%.2f"
-                          % (s, np.round(ee_pos, 3).tolist(), step, trig, grip_q), flush=True)
+                    print(f"[{s}] ee={np.round(ee_pos, 3).tolist()}  step={step:.3f}  "
+                          f"trig={trig:.2f} grip={grip_q:.2f}", flush=True)
             if now - last_dbg > 0.5:
                 last_dbg = now
             time.sleep(dt)
