@@ -5,9 +5,9 @@ The full mandated chain, end to end, in one process:
 
     VR controller
       -> Adamo web client                          (operator, in a headset)
-      -> Isaac Teleop #1 : device interface         (decode web client -> Isaac ControllerInput)
+      -> Isaac device interface                    (decode web client -> Isaac ControllerInput)
       -> Adamo                                      (device-representation seam)
-      -> Isaac Teleop #2 : ControllerRetargetEngine (Isaac Se3 retargeter -> ee_pose)
+      -> Isaac retargeting : ControllerRetargetEngine (Se3 retargeter -> ee_pose)
       -> OpenArm                                    (damped-least-squares IK -> Waveshare CAN)
 
 The robot side reuses the OpenArm project's proven ``ArmIKController`` (a stable
@@ -35,11 +35,12 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from adamo_isaac_teleop import (
-    ControllerDevice,
     ControllerRetargetEngine,
     DeviceSink,
     DeviceSource,
     TeleopReceiver,
+    make_controller_input,
+    trigger_value,
 )
 
 OPENARM = Path(os.environ.get("OPENARM_DIR", Path.home() / "openarm_vr_teleop"))
@@ -66,20 +67,19 @@ except ImportError:
 API_KEY = os.environ.get("ADAMO_API_KEY")
 
 WEB_ROBOT = "orin"           # what the Adamo web client publishes to
-SEAM_ROBOT = "orin-isaac"    # the Isaac device-representation seam between #1 and #2
+SEAM_ROBOT = "orin-isaac"    # device-representation seam: device interface -> retargeting
 CTRL_HZ = 60.0
 HOME = {"right": HOME_JOINTS_RIGHT, "left": HOME_JOINTS_LEFT}
 DEFAULT_CAN = {"right": "waveshare:0", "left": "waveshare:1"}
 
 
 # --------------------------------------------------------------------------
-# Isaac Teleop #1 -- device interface: web client -> Isaac device seam
+# Device interface: web client -> Isaac ControllerInput on the device seam
 # --------------------------------------------------------------------------
 def device_interface(session_in, session_out, sides, stop: threading.Event) -> None:
     rx = TeleopReceiver(WEB_ROBOT, session_in)
     sink = DeviceSink(SEAM_ROBOT, session_out)
-    print(f"[isaac#1] device interface: {WEB_ROBOT} web client -> {SEAM_ROBOT} device seam",
-          flush=True)
+    print(f"[device] {WEB_ROBOT} web client -> {SEAM_ROBOT} device seam", flush=True)
     dt = 1.0 / CTRL_HZ
     while not stop.is_set():
         for s in sides:
@@ -88,9 +88,9 @@ def device_interface(session_in, session_out, sides, stop: threading.Event) -> N
                 continue
             aim_p = c.tip_position if c.tip_position is not None else c.position
             aim_q = c.tip_orientation if c.tip_orientation is not None else c.orientation
-            sink.controller(ControllerDevice(
-                side=s, grip_position=c.position, grip_orientation=c.orientation,
-                aim_position=aim_p, aim_orientation=aim_q, buttons={"trigger": c.trigger}))
+            ci = make_controller_input(c.position, c.orientation, aim_p, aim_q,
+                                       buttons={"trigger": c.trigger})
+            sink.controller(s, ci)
         time.sleep(dt)
 
 
@@ -200,9 +200,9 @@ def main() -> int:
         # with a controller present -- warm it up before calibrating off its pose.
         ee, t0 = None, time.time()
         while ee is None and time.time() - t0 < 5.0:
-            dev = rx.controller(s)
-            if dev is not None:
-                ee = engine.step(dev.grip_position, dev.grip_orientation)
+            ci = rx.controller(s)
+            if ci is not None:
+                ee = engine.step_input(ci)
             if ee is None:
                 time.sleep(1.0 / CTRL_HZ)
         if ee is None:
@@ -229,15 +229,15 @@ def main() -> int:
         while True:
             now = time.time()
             for s in iks:
-                dev = rx.controller(s)
-                if dev is None:
+                ci = rx.controller(s)
+                if ci is None:
                     continue
                 # gripper: trigger -> open/close
-                trig = float(np.clip(dev.buttons.get("trigger", 0.0), 0.0, 1.0))
+                trig = float(np.clip(trigger_value(ci), 0.0, 1.0))
                 grip_q = GRIPPER_OPEN + trig * (GRIPPER_CLOSED - GRIPPER_OPEN)
                 arms[s].set_gripper(grip_q, kp=args.kp, kd=args.kd)
-                # arm: Isaac retarget -> DLS velocity IK
-                ee = engines[s].step(dev.grip_position, dev.grip_orientation)
+                # arm: retarget the controller pose -> DLS velocity IK
+                ee = engines[s].step_input(ci)
                 ee_pos = None if ee is None else euros[s](np.asarray(ee[:3]), now)
                 cmd = None if ee_pos is None else iks[s].compute(ee_pos, dt)
                 step = 0.0

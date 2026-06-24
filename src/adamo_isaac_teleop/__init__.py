@@ -17,23 +17,24 @@ complete OpenArm integration and an Isaac Sim one.
 from __future__ import annotations
 
 from . import cdr
-from .device import ControllerDevice, DeviceSink, DeviceSource
+from .device import DeviceSink, DeviceSource, make_controller_input, trigger_value
 from .receiver import Controller, Gamepad, Pose, TeleopReceiver
 from .retarget import ControllerRetargetEngine, HandRetargetEngine
 from .sender import TeleopSender
 
 __all__ = [
-    # web-client device source (Isaac Teleop #1 input)
+    # web-client device source (raw operator capture)
     "TeleopReceiver",
     "TeleopSender",
     "Controller",
     "Pose",
     "Gamepad",
-    # Isaac device-representation seam (Isaac #1 -> Adamo -> Isaac #2)
+    # Isaac device-representation seam (device interface -> Adamo -> retargeting)
     "DeviceSink",
     "DeviceSource",
-    "ControllerDevice",
-    # Isaac retargeting (Isaac Teleop #2)
+    "make_controller_input",
+    "trigger_value",
+    # Isaac retargeting (robot side)
     "ControllerRetargetEngine",
     "HandRetargetEngine",
     "cdr",
