@@ -45,12 +45,11 @@ app_launcher = AppLauncher(args)
 simulation_app = app_launcher.app
 
 # --- now safe to import the rest ---------------------------------------------
-import gymnasium as gym
-import torch
-import isaaclab_tasks  # noqa: F401  (registers Isaac-* envs)
-from isaaclab_tasks.utils import parse_env_cfg
-
 import adamo
+import gymnasium as gym
+import isaaclab_tasks  # noqa: F401  (registers Isaac-* envs)
+import torch
+from isaaclab_tasks.utils import parse_env_cfg
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from adamo_isaac_teleop import (
@@ -112,7 +111,7 @@ def main() -> int:
 
     ee0 = None
     prev = np.zeros(3)
-    print("TELEOP LIVE -> %s via Isaac ControllerRetargetEngine" % args.task, flush=True)
+    print(f"TELEOP LIVE -> {args.task} via Isaac ControllerRetargetEngine", flush=True)
     try:
         while simulation_app.is_running():
             dev = rx.controller(args.side)

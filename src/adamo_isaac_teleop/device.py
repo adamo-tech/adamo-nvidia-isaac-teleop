@@ -17,7 +17,6 @@ import struct
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -35,7 +34,7 @@ class ControllerDevice:
     grip_orientation: np.ndarray     # (4,) xyzw
     aim_position: np.ndarray         # (3,)
     aim_orientation: np.ndarray      # (4,) xyzw
-    buttons: Dict[str, float] = field(default_factory=dict)
+    buttons: dict[str, float] = field(default_factory=dict)
     grip_valid: bool = True
     aim_valid: bool = True
     t: float = 0.0
@@ -64,7 +63,8 @@ def decode_controller(data: bytes) -> ControllerDevice:
     aq = np.array(struct.unpack_from("<4f", data, off), np.float64); off += 16
     bvals = struct.unpack_from("<7f", data, off); off += 28
     gv, av = struct.unpack_from("<2B", data, off)
-    return ControllerDevice(side, gp, gq, ap, aq, dict(zip(BUTTONS, bvals)), bool(gv), bool(av))
+    buttons = dict(zip(BUTTONS, bvals, strict=True))  # both are exactly len(BUTTONS)
+    return ControllerDevice(side, gp, gq, ap, aq, buttons, bool(gv), bool(av))
 
 
 class DeviceSink:
@@ -89,7 +89,7 @@ class DeviceSource:
 
     def __init__(self, robot_name: str, session) -> None:
         self._lock = threading.Lock()
-        self._ctrl: Dict[str, ControllerDevice] = {}
+        self._ctrl: dict[str, ControllerDevice] = {}
         self._sub = session.subscribe(
             f"{robot_name}/teleop/device/controller", callback=self._cb)
 
@@ -102,11 +102,11 @@ class DeviceSource:
         with self._lock:
             self._ctrl[dev.side] = dev
 
-    def controller(self, side: str) -> Optional[ControllerDevice]:
+    def controller(self, side: str) -> ControllerDevice | None:
         with self._lock:
             return self._ctrl.get(side)
 
-    def sides(self) -> List[str]:
+    def sides(self) -> list[str]:
         with self._lock:
             return list(self._ctrl)
 
