@@ -139,7 +139,9 @@ def main() -> int:
     ap.add_argument("--left-can", default=DEFAULT_CAN["left"])
     ap.add_argument("--kp", type=float, default=35.0)
     ap.add_argument("--kd", type=float, default=1.0)
-    ap.add_argument("--max-vel", type=float, default=2.0, help="joint velocity cap (rad/s)")
+    ap.add_argument("--max-vel", type=float, default=6.0, help="joint velocity cap (rad/s)")
+    ap.add_argument("--smooth", type=float, default=6.0,
+                    help="1 Euro min_cutoff; higher = snappier/less lag, lower = smoother")
     args = ap.parse_args()
     if not API_KEY:
         print("set ADAMO_API_KEY (e.g. in a .env file -- see .env.example)", flush=True)
@@ -210,7 +212,7 @@ def main() -> int:
         iks[s] = ArmIKController(kins[s], side=s, position_scale=1.0,
                                  max_joint_velocity=args.max_vel)
         iks[s].calibrate(cur[s], ee[:3])              # position-only (no orientation)
-        euros[s] = OneEuroFilter(np.asarray(ee[:3]))
+        euros[s] = OneEuroFilter(np.asarray(ee[:3]), min_cutoff=args.smooth)
     if not iks:
         print("no arm could be calibrated; aborting.")
         stop.set()
