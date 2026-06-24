@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "adamo-isaac-teleop"
+version = "0.1.0"
+description = "Teleoperate a robot over the Adamo fabric, retargeted with NVIDIA Isaac Teleop"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Adamo" }]
+keywords = ["teleoperation", "robotics", "isaac-teleop", "adamo", "zenoh", "webxr", "vr"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "numpy>=1.23",
+    "adamo>=0.4.27",
+    # Isaac Teleop retargeting; the "retargeters-lite" extra is scipy-only
+    # (no torch/CUDA) and installs cleanly on Jetson aarch64 / Python 3.10.
+    "isaacteleop[retargeters-lite]>=1.1.8",
+]
+
+[project.optional-dependencies]
+# Hardware example only: OpenArm bimanual over a Waveshare USB-CAN-FD adapter,
+# with Placo inverse kinematics. Not needed to use the library itself.
+openarm = ["placo", "python-can", "python-dotenv"]
+dev = ["ruff", "pytest"]
+
+[project.urls]
+Homepage = "https://adamohq.com"
+Repository = "https://github.com/AdamoHQ/adamo-nvidia-isaac-teleop"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/adamo_isaac_teleop"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
