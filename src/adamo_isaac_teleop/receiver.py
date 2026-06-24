@@ -1,10 +1,10 @@
-"""TeleopReceiver -- the Adamo web client device source (Isaac Teleop #1's input).
+"""TeleopReceiver -- the Adamo web client device source (the device interface's input).
 
 Decodes exactly what the **Adamo web client** publishes from a WebXR session and makes
-it available to poll. This is the operator-side *device interface* input: a frontend
-running in the headset's browser. (The robot side does NOT read this directly — Isaac
-Teleop #1 turns it into Isaac's device representation and forwards that over the
-``device`` seam; see ``device.py``.)
+it available to poll. This is the raw operator capture: a frontend running in the
+headset's browser. (The robot side does NOT read this directly — the device interface
+turns it into Isaac's ``ControllerInput`` and forwards that over the ``device`` seam;
+see ``device.py``.)
 
 Handedness is dynamic: whatever ``/controller/{h}`` or ``/hand/{h}`` the web client
 sends is tracked under that key (``left`` / ``right`` / ``none`` / ...). Nothing about

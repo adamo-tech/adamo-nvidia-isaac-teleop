@@ -28,3 +28,5 @@ except ImportError:
         _mod.__getattr__ = lambda _attr: MagicMock()  # type: ignore[attr-defined]
         sys.modules[_name] = _mod
     sys.modules["isaacteleop.retargeting_engine.tensor_types"].NUM_HAND_JOINTS = 26
+    # Mark the stub so tests needing the real library can skip themselves.
+    sys.modules["isaacteleop"].__is_stub__ = True

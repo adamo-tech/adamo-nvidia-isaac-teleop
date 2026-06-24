@@ -5,9 +5,9 @@ Same mandated chain as the OpenArm example, with a *simulated* robot as the last
 
     VR controller
       -> Adamo web client
-      -> Isaac Teleop #1 : device interface (decode web client -> Isaac ControllerInput)
+      -> Isaac device interface             (decode web client -> Isaac ControllerInput)
       -> Adamo                              (device-representation seam)
-      -> Isaac Teleop #2 : ControllerRetargetEngine (Isaac Se3 retargeter -> ee_pose)
+      -> Isaac retargeting : ControllerRetargetEngine (Se3 retargeter -> ee_pose)
       -> Isaac Lab env.step()               (simulated arm)
 
 Isaac Teleop's retargeter is the only path operator -> sim; there is no bypass.
@@ -53,11 +53,12 @@ from isaaclab_tasks.utils import parse_env_cfg
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from adamo_isaac_teleop import (
-    ControllerDevice,
     ControllerRetargetEngine,
     DeviceSink,
     DeviceSource,
     TeleopReceiver,
+    make_controller_input,
+    trigger_value,
 )
 
 try:
@@ -77,7 +78,7 @@ def robot_from_retarget(delta: np.ndarray) -> np.ndarray:
 
 
 def device_interface(session_in, session_out, side, stop):
-    """Isaac Teleop #1: web client -> Isaac device seam."""
+    """Device interface: decode the web client and publish Isaac's ControllerInput."""
     rx = TeleopReceiver(WEB_ROBOT, session_in)
     sink = DeviceSink(SEAM_ROBOT, session_out)
     dt = 1.0 / HZ
@@ -86,9 +87,9 @@ def device_interface(session_in, session_out, side, stop):
         if c.position is not None:
             aim_p = c.tip_position if c.tip_position is not None else c.position
             aim_q = c.tip_orientation if c.tip_orientation is not None else c.orientation
-            sink.controller(ControllerDevice(
-                side=side, grip_position=c.position, grip_orientation=c.orientation,
-                aim_position=aim_p, aim_orientation=aim_q, buttons={"trigger": c.trigger}))
+            ci = make_controller_input(c.position, c.orientation, aim_p, aim_q,
+                                       buttons={"trigger": c.trigger})
+            sink.controller(side, ci)
         time.sleep(dt)
 
 
@@ -101,8 +102,8 @@ def main() -> int:
     threading.Thread(target=device_interface, args=(sess_op, sess_op, args.side, stop),
                      daemon=True).start()
 
-    rx = DeviceSource(SEAM_ROBOT, sess_sim)         # Isaac Teleop #2 input
-    engine = ControllerRetargetEngine(args.side)    # Isaac Teleop #2 retargeter
+    rx = DeviceSource(SEAM_ROBOT, sess_sim)         # device seam -> retargeting input
+    engine = ControllerRetargetEngine(args.side)    # Isaac retargeter
 
     env_cfg = parse_env_cfg(args.task, num_envs=1)
     env = gym.make(args.task, cfg=env_cfg)
@@ -114,8 +115,8 @@ def main() -> int:
     print(f"TELEOP LIVE -> {args.task} via Isaac ControllerRetargetEngine", flush=True)
     try:
         while simulation_app.is_running():
-            dev = rx.controller(args.side)
-            ee = None if dev is None else engine.step(dev.grip_position, dev.grip_orientation)
+            ci = rx.controller(args.side)
+            ee = None if ci is None else engine.step_input(ci)
             if ee is not None:
                 if ee0 is None:
                     ee0 = ee[:3].copy()
@@ -124,7 +125,7 @@ def main() -> int:
                 rd = prev
             step_delta = (rd - prev) * args.sensitivity
             prev = rd
-            grip = 1.0 if (dev and dev.buttons.get("trigger", 0.0) > 0.5) else -1.0
+            grip = 1.0 if (ci is not None and trigger_value(ci) > 0.5) else -1.0
             action = torch.tensor(
                 [[step_delta[0], step_delta[1], step_delta[2], 0.0, 0.0, 0.0, grip]],
                 dtype=torch.float32, device=device,

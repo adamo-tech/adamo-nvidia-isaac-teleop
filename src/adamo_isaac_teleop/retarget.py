@@ -115,8 +115,25 @@ class ControllerRetargetEngine:
         self._leaf = self._in.name
         self._key = ValueInput.VALUE
 
+    def step_input(self, controller_input) -> np.ndarray | None:
+        """Retarget Isaac Teleop's ``ControllerInput`` directly -> ee_pose (7,), or None.
+
+        This is the device-seam path: feed the very ``ControllerInput`` that arrived from
+        the device interface (see :func:`adamo_isaac_teleop.make_controller_input`) — no
+        re-copying of fields.
+        """
+        out = self._pipe.execute_pipeline({self._leaf: {self._key: controller_input}})
+        ee = out["ee_pose"]
+        if getattr(ee, "is_none", False):
+            return None
+        return np.asarray(ee[0], dtype=np.float32).copy()
+
     def step(self, grip_pos, grip_quat_xyzw, valid: bool = True) -> np.ndarray | None:
-        """Controller grip pose -> ee_pose (7,) pos+quat, or None if absent."""
+        """Controller grip pose -> ee_pose (7,) pos+quat, or None if absent.
+
+        Convenience wrapper for the direct-input case (e.g. driving the engine straight
+        from a :class:`~adamo_isaac_teleop.TeleopReceiver` without the device seam).
+        """
         i = ControllerInputIndex
         gp = np.ascontiguousarray(grip_pos, np.float32)
         gq = np.ascontiguousarray(grip_quat_xyzw, np.float32)
@@ -130,8 +147,4 @@ class ControllerRetargetEngine:
         for f in (i.PRIMARY_CLICK, i.SECONDARY_CLICK, i.THUMBSTICK_CLICK,
                   i.THUMBSTICK_X, i.THUMBSTICK_Y, i.SQUEEZE_VALUE, i.TRIGGER_VALUE):
             tg[f] = 0.0
-        out = self._pipe.execute_pipeline({self._leaf: {self._key: tg}})
-        ee = out["ee_pose"]
-        if getattr(ee, "is_none", False):
-            return None
-        return np.asarray(ee[0], dtype=np.float32).copy()
+        return self.step_input(tg)
