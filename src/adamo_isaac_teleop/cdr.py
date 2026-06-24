@@ -8,7 +8,6 @@ adamo-network wire format (see adamo-ts/tools/listen.py for the reference).
 from __future__ import annotations
 
 import struct
-from typing import Optional
 
 import numpy as np
 
@@ -74,7 +73,7 @@ def decode_pose_stamped(cdr: bytes):
         return None
 
 
-def decode_pose_array(cdr: bytes) -> Optional[np.ndarray]:
+def decode_pose_array(cdr: bytes) -> np.ndarray | None:
     """geometry_msgs/PoseArray -> (N, 7) [x,y,z, qx,qy,qz,qw] or None (e.g. hand joints)."""
     try:
         r = CdrReader(cdr); _skip_header(r)

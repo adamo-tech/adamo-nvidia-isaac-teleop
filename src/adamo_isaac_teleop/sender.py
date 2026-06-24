@@ -17,7 +17,6 @@ client uses, so the two ends interoperate.
 from __future__ import annotations
 
 import json
-from typing import List, Optional
 
 from .cdr import (
     encode_bool,
@@ -40,7 +39,7 @@ class TeleopSender:
         self._js = session.publisher(f"{robot_name}/control/cdr/joint_states", **opts)
 
     def controller(self, side: str, position, orientation_xyzw,
-                   trigger: Optional[float] = None, buttons: Optional[List[int]] = None) -> None:
+                   trigger: float | None = None, buttons: list[int] | None = None) -> None:
         self._xr.put(encode_envelope(
             f"/controller/{side}", "geometry_msgs/msg/PoseStamped",
             encode_pose_stamped(position, orientation_xyzw)))

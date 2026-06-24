@@ -25,7 +25,6 @@ import json
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 import numpy as np
 
@@ -41,27 +40,27 @@ from .cdr import (
 
 @dataclass
 class Controller:
-    position: Optional[np.ndarray] = None       # (3,)  grip
-    orientation: Optional[np.ndarray] = None    # (4,) xyzw grip
-    tip_position: Optional[np.ndarray] = None   # (3,)  aim / fingertip
-    tip_orientation: Optional[np.ndarray] = None
-    axes: List[float] = field(default_factory=list)
-    buttons: List[int] = field(default_factory=list)
+    position: np.ndarray | None = None       # (3,)  grip
+    orientation: np.ndarray | None = None    # (4,) xyzw grip
+    tip_position: np.ndarray | None = None   # (3,)  aim / fingertip
+    tip_orientation: np.ndarray | None = None
+    axes: list[float] = field(default_factory=list)
+    buttons: list[int] = field(default_factory=list)
     trigger: float = 0.0
     t: float = 0.0
 
 
 @dataclass
 class Pose:
-    position: Optional[np.ndarray] = None
-    orientation: Optional[np.ndarray] = None
+    position: np.ndarray | None = None
+    orientation: np.ndarray | None = None
     t: float = 0.0
 
 
 @dataclass
 class Gamepad:
-    axes: List[float] = field(default_factory=list)
-    buttons: List[int] = field(default_factory=list)
+    axes: list[float] = field(default_factory=list)
+    buttons: list[int] = field(default_factory=list)
     t: float = 0.0
 
 
@@ -118,7 +117,7 @@ class TeleopReceiver:
     # ---- subscription callbacks ----
     def _xr_cb(self, sample) -> None:
         try:
-            topic, type_name, cdr = decode_envelope(sample.payload)
+            topic, type_name, cdr = decode_envelope(bytes(sample.payload))
         except Exception:  # noqa: BLE001
             return
         now = time.time()
@@ -160,7 +159,7 @@ class TeleopReceiver:
                     self._clutch = b
 
     def _joy_cb(self, sample) -> None:
-        r = _joy_any(sample.payload)
+        r = _joy_any(bytes(sample.payload))
         if r is None:
             return
         with self._lock:
@@ -180,7 +179,7 @@ class TeleopReceiver:
                 self._keys.pop(key, None)
 
     def _gello_cb(self, sample) -> None:
-        js = _jointstate_any(sample.payload)
+        js = _jointstate_any(bytes(sample.payload))
         if js is None:
             return
         with self._lock:
@@ -201,7 +200,7 @@ class TeleopReceiver:
                 axes=list(c.axes), buttons=list(c.buttons), trigger=c.trigger, t=c.t,
             )
 
-    def controllers(self) -> List[str]:
+    def controllers(self) -> list[str]:
         """Handedness keys seen so far (e.g. ['right'] or ['left','right'])."""
         with self._lock:
             return list(self._ctrl)
@@ -217,7 +216,7 @@ class TeleopReceiver:
             return Pose(None if h.position is None else h.position.copy(),
                         None if h.orientation is None else h.orientation.copy(), h.t)
 
-    def hand(self, side: str) -> Optional[np.ndarray]:
+    def hand(self, side: str) -> np.ndarray | None:
         with self._lock:
             a = self._hands.get(side)
             return None if a is None else a.copy()
@@ -232,7 +231,7 @@ class TeleopReceiver:
         with self._lock:
             return {k for k, t in self._keys.items() if now - t < timeout}
 
-    def gello(self) -> Optional[dict]:
+    def gello(self) -> dict | None:
         with self._lock:
             return None if self._gello is None else dict(self._gello)
 

@@ -20,34 +20,31 @@ Adamo carries over the wire from the WebXR capture running in the headset browse
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
-
 import numpy as np
-
+from isaacteleop.retargeters.gripper_retargeter import (
+    GripperRetargeter,
+    GripperRetargeterConfig,
+)
+from isaacteleop.retargeters.se3_retargeter import (
+    Se3AbsRetargeter,
+    Se3RetargeterConfig,
+)
 from isaacteleop.retargeting_engine.interface import (
     OutputCombiner,
     TensorGroup,
     ValueInput,
 )
 from isaacteleop.retargeting_engine.tensor_types import (
+    NUM_HAND_JOINTS,
     ControllerInput,
     ControllerInputIndex,
     HandInput,
     HandInputIndex,
-    NUM_HAND_JOINTS,
-)
-from isaacteleop.retargeters.se3_retargeter import (
-    Se3AbsRetargeter,
-    Se3RetargeterConfig,
-)
-from isaacteleop.retargeters.gripper_retargeter import (
-    GripperRetargeter,
-    GripperRetargeterConfig,
 )
 
 NUM_JOINTS = int(NUM_HAND_JOINTS)  # 26, OpenXR XrHandJointEXT order
 
-EeAndGripper = Tuple[np.ndarray, float]
+EeAndGripper = tuple[np.ndarray, float]
 
 
 class HandRetargetEngine:
@@ -78,7 +75,7 @@ class HandRetargetEngine:
         joint_orientations: np.ndarray,  # (26, 4) float32, quaternion xyzw
         joint_radii: np.ndarray,         # (26,)   float32, meters
         joint_valid: np.ndarray,         # (26,)   uint8, 1 = tracked
-    ) -> Optional[EeAndGripper]:
+    ) -> EeAndGripper | None:
         """Retarget one hand frame.
 
         Returns ``(ee_pose, gripper)`` where ``ee_pose`` is a ``(7,)`` array of
@@ -87,7 +84,8 @@ class HandRetargetEngine:
         """
         tg = TensorGroup(HandInput())
         tg[HandInputIndex.JOINT_POSITIONS] = np.ascontiguousarray(joint_positions, dtype=np.float32)
-        tg[HandInputIndex.JOINT_ORIENTATIONS] = np.ascontiguousarray(joint_orientations, dtype=np.float32)
+        tg[HandInputIndex.JOINT_ORIENTATIONS] = np.ascontiguousarray(
+            joint_orientations, dtype=np.float32)
         tg[HandInputIndex.JOINT_RADII] = np.ascontiguousarray(joint_radii, dtype=np.float32)
         tg[HandInputIndex.JOINT_VALID] = np.ascontiguousarray(joint_valid, dtype=np.uint8)
 
@@ -117,7 +115,7 @@ class ControllerRetargetEngine:
         self._leaf = self._in.name
         self._key = ValueInput.VALUE
 
-    def step(self, grip_pos, grip_quat_xyzw, valid: bool = True) -> Optional[np.ndarray]:
+    def step(self, grip_pos, grip_quat_xyzw, valid: bool = True) -> np.ndarray | None:
         """Controller grip pose -> ee_pose (7,) pos+quat, or None if absent."""
         i = ControllerInputIndex
         gp = np.ascontiguousarray(grip_pos, np.float32)
